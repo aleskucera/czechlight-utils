@@ -22,7 +22,18 @@ logging.config.dictConfig(config)
 logger = logging.getLogger(__name__)
 
 
-def download_dependency(url: str, branch: str, name: str):
+def download_dependency(url: str, branch: str, name: str) -> None:
+    """Downloads a dependency from a Git repository and checks out a specific branch.
+
+    Args:
+        url (str): The URL of the Git repository.
+        branch (str): The branch to checkout.
+        name (str): The name of the dependency.
+
+    Returns:
+        None
+    """
+
     logger.info(f"Downloading {name}: "
                 f"\n\turl: {url}"
                 f"\n\tbranch: {branch}")
@@ -56,7 +67,16 @@ def download_dependency(url: str, branch: str, name: str):
     logger.info(f"Finished downloading {name}")
 
 
-def clean_dependency(name: str):
+def clean_dependency(name: str) -> None:
+    """Cleans up a previously downloaded and installed dependency.
+
+    Args:
+        name (str): The name of the dependency.
+
+    Returns:
+        None
+    """
+
     build_dir = os.path.join(BUILDS_DIR, name)
     install_dir = INSTALL_DIR
     src_dir = os.path.join(DEPENDENCIES_DIR, name)
@@ -89,7 +109,17 @@ def clean_dependency(name: str):
     logger.info(f"Finished cleaning {name}")
 
 
-def build_and_install(name: str, additional_args: list = None):
+def build_and_install(name: str, additional_args: list = None) -> None:
+    """Builds and installs a dependency using CMake and Ninja.
+
+    Args:
+        name (str): The name of the dependency.
+        additional_args (list, optional): Additional arguments to pass to CMake.
+
+    Returns:
+        None
+    """
+
     build_dir = os.path.join(BUILDS_DIR, name)
     install_dir = INSTALL_DIR
     dependency_dir = os.path.join(DEPENDENCIES_DIR, name)
