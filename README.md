@@ -2,6 +2,25 @@
 
 This repository contains a collection of scripts that are used to manage the CzechLight project.
 
+## Setup
+
+Download the repository and install the dependencies:
+
+```bash
+git clone https://github.com/aleskucera/czechlight-utils.git
+cd czechlight-utils
+pip3 install -r requirements.txt
+```
+
+Then create a **CzechLight** directory for example in your home directory by running:
+
+```bash
+mkdir ~/czechlight
+```
+
+then update the `CZECHLIGHT_DIR` variable in the `main.py` script to point to the newly created
+directory.
+
 ## Usage
 
 To use the scripts, you need to have Python 3 installed. Then you can run the scripts as follows:
@@ -21,3 +40,13 @@ The following actions are currently supported:
 - `download`: Downloads the repository/repositories.
 - `install`: Builds and installs the repository/repositories.
 - `clean`: Removes all the files created by the `download` and `install` actions of the repository/repositories.
+
+## Examples
+
+Typical usage:
+
+```bash
+python3 main.py --action=download --all
+python3 main.py --action=install --all
+python3 main.py --action=clean --all
+```
