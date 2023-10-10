@@ -1,18 +1,22 @@
 import os
+import yaml
 import shutil
 import argparse
 import subprocess
 import logging.config
 
-import yaml
-
-SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 CZECHLIGHT_DIR = "/home/ales/cesnet/czechlight/"
 
 LOG_DIR = os.path.join(CZECHLIGHT_DIR, "logs")
-BUILDS_DIR = os.path.join(CZECHLIGHT_DIR, "builds")
+SRC_DIR = os.path.join(CZECHLIGHT_DIR, "source")
+BUILD_DIR = os.path.join(CZECHLIGHT_DIR, "build")
 INSTALL_DIR = os.path.join(CZECHLIGHT_DIR, "install")
-DEPENDENCIES_DIR = os.path.join(CZECHLIGHT_DIR, "dependencies")
+
+# Create the required directories
+required_dirs = [SRC_DIR, BUILD_DIR, INSTALL_DIR, LOG_DIR]
+for directory in required_dirs:
+    if not os.path.exists(directory):
+        os.makedirs(directory)
 
 with open("config/logging.yaml", 'r') as f:
     config = yaml.safe_load(f.read())
@@ -22,75 +26,75 @@ logging.config.dictConfig(config)
 logger = logging.getLogger(__name__)
 
 
-def download_dependency(url: str, branch: str, name: str) -> None:
-    """Downloads a dependency from a Git repository and checks out a specific branch.
+def download(repository_url: str, repository_name: str, branch: str, ) -> None:
+    """Downloads a repository and switches to the specified branch.
 
     Args:
-        url (str): The URL of the Git repository.
-        branch (str): The branch to checkout.
-        name (str): The name of the dependency.
+        repository_url (str): The URL of the Git repository.
+        repository_name (str): The name of the repository.
+        branch (str): The branch to switch to.
 
     Returns:
         None
     """
 
-    logger.info(f"Downloading {name}: "
-                f"\n\turl: {url}"
+    logger.info(f"Downloading {repository_name}: "
+                f"\n\turl: {repository_url}"
                 f"\n\tbranch: {branch}")
 
-    # Create the build directory
-    dependency_dir = os.path.join(DEPENDENCIES_DIR, name)
-    if os.path.exists(dependency_dir):
-        shutil.rmtree(dependency_dir)
-        logger.info(f"Removed old {name} directory")
+    src_dir = os.path.join(SRC_DIR, repository_name)
+    if os.path.exists(src_dir):
+        shutil.rmtree(src_dir)
+        logger.info(f"Removed old {repository_name} directory")
 
-    os.makedirs(dependency_dir)
-    logger.info(f"Created {name} directory")
+    os.makedirs(src_dir)
+    logger.info(f"Created {repository_name} directory")
 
-    # Download the repository
+    log_file = os.path.join(LOG_DIR, f"{repository_name}.log")
     try:
-        log_file = os.path.join(LOG_DIR, f"{name}.log")
         with open(log_file, 'w') as f:
-            logger.info(f"Downloading {name}...")
-            subprocess.run(["git", "clone", url, "."],
-                           cwd=dependency_dir, check=True, stdout=f, stderr=f)
+            logger.info(f"Downloading {repository_name}...")
+            subprocess.run(["git", "clone", repository_url, "."],
+                           cwd=src_dir, check=True, stdout=f, stderr=f)
 
             logger.info(f"Checking out {branch}...")
             subprocess.run(["git", "checkout", branch],
-                           cwd=dependency_dir, check=True, stdout=f, stderr=f)
+                           cwd=src_dir, check=True, stdout=f, stderr=f)
 
     except subprocess.CalledProcessError as e:
         logger.error(f"Error occurred: {e}")
         logger.error(f"See {log_file} for more details")
         exit(1)
 
-    logger.info(f"Finished downloading {name}")
+    logger.info(f"Finished downloading {repository_name}")
 
 
-def clean_dependency(name: str) -> None:
-    """Cleans up a previously downloaded and installed dependency.
+def clean(repository_name: str) -> None:
+    """Cleans up a previously downloaded and installed repository.
 
     Args:
-        name (str): The name of the dependency.
+        repository_name (str): The name of repository to clean up.
 
     Returns:
         None
     """
 
-    build_dir = os.path.join(BUILDS_DIR, name)
     install_dir = INSTALL_DIR
-    src_dir = os.path.join(DEPENDENCIES_DIR, name)
-    log_file = os.path.join(LOG_DIR, f"{name}.log")
+    src_dir = os.path.join(SRC_DIR, repository_name)
+    build_dir = os.path.join(BUILD_DIR, repository_name)
+    log_file = os.path.join(LOG_DIR, f"{repository_name}.log")
 
+    # Remove the build directory
     if os.path.exists(build_dir):
         shutil.rmtree(build_dir)
         logger.info(f"Removed {build_dir}")
 
+    # Remove all files that were created by the installation
     if os.path.exists(install_dir):
-        logger.info(f"Removing {name} from {install_dir}")
+        logger.info(f"Removing {repository_name} from {install_dir}")
         for root, dirs, files in os.walk(install_dir):
             for file in files + dirs:
-                if file.startswith(name):
+                if file.startswith(repository_name):
                     logger.info(f"Removing {os.path.join(root, file)}")
                     path = os.path.join(root, file)
                     if os.path.isfile(path):
@@ -98,32 +102,34 @@ def clean_dependency(name: str) -> None:
                     elif os.path.isdir(path):
                         shutil.rmtree(path)
 
+    # Remove the source directory
     if os.path.exists(src_dir):
         shutil.rmtree(src_dir)
         logger.info(f"Removed {src_dir}")
 
+    # Remove the log file
     if os.path.exists(log_file):
         os.remove(log_file)
         logger.info(f"Removed {log_file}")
 
-    logger.info(f"Finished cleaning {name}")
+    logger.info(f"Finished cleaning {repository_name}")
 
 
-def build_and_install(name: str, additional_args: list = None) -> None:
-    """Builds and installs a dependency using CMake and Ninja.
+def build_and_install(repository_name: str, additional_args: list = None) -> None:
+    """Builds and installs a repository using CMake and Ninja.
 
     Args:
-        name (str): The name of the dependency.
+        repository_name (str): The name of the repository to build.
         additional_args (list, optional): Additional arguments to pass to CMake.
 
     Returns:
         None
     """
 
-    build_dir = os.path.join(BUILDS_DIR, name)
     install_dir = INSTALL_DIR
-    dependency_dir = os.path.join(DEPENDENCIES_DIR, name)
-    log_file = os.path.join(LOG_DIR, f"{name}.log")
+    src_dir = os.path.join(SRC_DIR, repository_name)
+    build_dir = os.path.join(BUILD_DIR, repository_name)
+    log_file = os.path.join(LOG_DIR, f"{repository_name}.log")
 
     if additional_args is None:
         additional_args = list()
@@ -156,20 +162,21 @@ def build_and_install(name: str, additional_args: list = None) -> None:
 
     try:
         with open(log_file, 'w') as f:
-            logger.info(f"Building {name}...")
-            subprocess.run(["cmake", dependency_dir, "-GNinja",
+            logger.info(f"Building {repository_name}...")
+            subprocess.run(["cmake", src_dir, "-GNinja",
                             f"-DCMAKE_INSTALL_PREFIX:PATH={install_dir}",
                             f"-DCMAKE_PREFIX_PATH:PATH={install_dir}"]
                            + additional_args,
                            cwd=build_dir, env=env, check=True, stdout=f, stderr=f)
-            logger.info(f"Installing {name}...")
+            logger.info(f"Installing {repository_name}...")
             subprocess.run(["ninja", "install"],
                            cwd=build_dir, env=env, check=True, stdout=f, stderr=f)
     except subprocess.CalledProcessError as e:
         logger.error(f"Error occurred: {e}")
+        logger.error(f"See {log_file} for more details")
         exit(1)
 
-    logger.info(f"Finished installation of {name}")
+    logger.info(f"Finished installation of {repository_name}")
 
 
 if __name__ == "__main__":
@@ -180,17 +187,19 @@ if __name__ == "__main__":
     arg_parser.add_argument("--repository", type=str, help="Perform the action on the specified repository")
     args = arg_parser.parse_args()
 
-    with open("config/dependencies.yaml", 'r') as f:
+    # Load the dependencies
+    with open("config/repositories.yaml", 'r') as f:
         dependencies = yaml.safe_load(f.read())
 
+    # Perform the specified action
     if args.action == "download":
         if args.all:
             for name, data in dependencies.items():
-                download_dependency(data["url"], data["branch"], name)
+                download(data["url"], name, data["branch"])
         elif args.dependency:
-            download_dependency(dependencies[args.dependency]["url"],
-                                dependencies[args.dependency]["branch"],
-                                args.dependency)
+            download(dependencies[args.dependency]["url"],
+                     args.dependency,
+                     dependencies[args.dependency]["branch"])
         else:
             arg_parser.error("Either --all or --dependency must be specified")
 
@@ -206,8 +215,8 @@ if __name__ == "__main__":
     if args.action == "clean":
         if args.all:
             for name, data in dependencies.items():
-                clean_dependency(name)
+                clean(name)
         elif args.dependency:
-            clean_dependency(args.dependency)
+            clean(args.dependency)
         else:
             arg_parser.error("Either --all or --dependency must be specified")
