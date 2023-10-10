@@ -4,7 +4,7 @@ This repository contains a collection of scripts that are used to manage the Cze
 
 ## Setup
 
-Download the repository and install the dependencies:
+Download the repository and install the dependencies (for Python 3.10 environment):
 
 ```bash
 git clone https://github.com/aleskucera/czechlight-utils.git
