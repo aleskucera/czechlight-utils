@@ -1,4 +1,5 @@
 import os
+import sys
 import yaml
 import shutil
 import argparse
@@ -94,9 +95,9 @@ def clean(repository_name: str) -> None:
         logger.info(f"Removing {repository_name} from {install_dir}")
         for root, dirs, files in os.walk(install_dir):
             for file in files + dirs:
-                if file.startswith(repository_name):
-                    logger.info(f"Removing {os.path.join(root, file)}")
+                if repository_name in file:
                     path = os.path.join(root, file)
+                    logger.info(f"Removing {path}")
                     if os.path.isfile(path):
                         os.remove(path)
                     elif os.path.isdir(path):
@@ -142,11 +143,11 @@ def build_and_install(repository_name: str, additional_args: list = None) -> Non
     env["CMAKE_EXPORT_COMPILE_COMMANDS"] = "YES"
 
     # Set the installation variables
-    env["PATH"] = f"{install_dir}/bin:{env['PATH']}"
+    env["PATH"] = f"{install_dir}/bin:{install_dir}/share:{env['PATH']}"
     if 'LD_LIBRARY_PATH' not in env:
-        env["LD_LIBRARY_PATH"] = f"{install_dir}/lib"
+        env["LD_LIBRARY_PATH"] = f"{install_dir}/lib:{install_dir}/share"
     else:
-        env["LD_LIBRARY_PATH"] = f"{install_dir}/lib:{env['LD_LIBRARY_PATH']}"
+        env["LD_LIBRARY_PATH"] = f"{install_dir}/lib:{install_dir}/share:{env['LD_LIBRARY_PATH']}"
 
     if 'PKG_CONFIG_PATH' not in env:
         env["PKG_CONFIG_PATH"] = f"{install_dir}/lib/pkgconfig"
@@ -163,11 +164,17 @@ def build_and_install(repository_name: str, additional_args: list = None) -> Non
     try:
         with open(log_file, 'w') as f:
             logger.info(f"Building {repository_name}...")
-            subprocess.run(["cmake", src_dir, "-GNinja",
-                            f"-DCMAKE_INSTALL_PREFIX:PATH={install_dir}",
-                            f"-DCMAKE_PREFIX_PATH:PATH={install_dir}"]
-                           + additional_args,
-                           cwd=build_dir, env=env, check=True, stdout=f, stderr=f)
+            subprocess.run(
+                ["cmake", src_dir, "-GNinja",
+                 f"-DCMAKE_INSTALL_PREFIX:PATH={install_dir}",
+                 f"-DCMAKE_PREFIX_PATH:PATH={install_dir}",
+                 "-DHAVE_PTHREAD_MUTEX_TIMEDLOCK=OFF",
+                 "-DHAVE_PTHREAD_MUTEX_CLOCKLOCK=OFF",
+                 "-DHAVE_PTHREAD_RWLOCK_CLOCKRDLOCK=OFF",
+                 "-DHAVE_PTHREAD_RWLOCK_CLOCKWRLOCK=OFF",
+                 "-DHAVE_PTHREAD_COND_CLOCKWAIT=OFF"]
+                + additional_args,
+                cwd=build_dir, env=env, check=True, stdout=f, stderr=f)
             logger.info(f"Installing {repository_name}...")
             subprocess.run(["ninja", "install"],
                            cwd=build_dir, env=env, check=True, stdout=f, stderr=f)
@@ -196,27 +203,27 @@ if __name__ == "__main__":
         if args.all:
             for name, data in dependencies.items():
                 download(data["url"], name, data["branch"])
-        elif args.dependency:
-            download(dependencies[args.dependency]["url"],
-                     args.dependency,
-                     dependencies[args.dependency]["branch"])
+        elif args.repository:
+            download(dependencies[args.repository]["url"],
+                     args.repository,
+                     dependencies[args.repository]["branch"])
         else:
-            arg_parser.error("Either --all or --dependency must be specified")
+            arg_parser.error("Either --all or --repository must be specified")
 
     if args.action == "install":
         if args.all:
             for name, data in dependencies.items():
                 build_and_install(name, data["build_args"])
-        elif args.dependency:
-            build_and_install(args.dependency, dependencies[args.dependency]["build_args"])
+        elif args.repository:
+            build_and_install(args.repository, dependencies[args.repository]["build_args"])
         else:
-            arg_parser.error("Either --all or --dependency must be specified")
+            arg_parser.error("Either --all or --repository must be specified")
 
     if args.action == "clean":
         if args.all:
             for name, data in dependencies.items():
                 clean(name)
-        elif args.dependency:
-            clean(args.dependency)
+        elif args.repository:
+            clean(args.repository)
         else:
-            arg_parser.error("Either --all or --dependency must be specified")
+            arg_parser.error("Either --all or --repository must be specified")
