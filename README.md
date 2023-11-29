@@ -50,3 +50,20 @@ python3 main.py --action=download --all
 python3 main.py --action=install --all
 python3 main.py --action=clean --all
 ```
+
+## Ubuntu setup
+
+To setup the environment on Ubuntu, run the following commands:
+
+```bash
+sudo apt install libcmocka-dev
+sudo apt-get install curl libssl-dev libcurl4-openssl-dev
+```
+
+```bash
+mkdir /home/ales/cesnet/czechlight/install/run
+touch /home/ales/cesnet/czechlight/install/run/netopeer2-server.sock
+touch /home/ales/cesnet/czechlight/install/run/netopeer2-server.pid
+netopeer2-server -d -U/home/ales/cesnet/czechlight/install/run/netopeer2-server.sock -p /home/ales/cesnet/czechlight/install/run/netopeer2-server.pid
+netconf-cli --socket /home/ales/cesnet/czechlight/install/run/netopeer2-server.sock
+```

@@ -1,229 +1,149 @@
+#!/usr/bin/env python3
+
 import os
-import sys
 import yaml
 import shutil
 import argparse
-import subprocess
 import logging.config
 
+from src.utils import install, clean, load_env, download_dependency
+
 CZECHLIGHT_DIR = "/home/ales/cesnet/czechlight/"
-
-LOG_DIR = os.path.join(CZECHLIGHT_DIR, "logs")
-SRC_DIR = os.path.join(CZECHLIGHT_DIR, "source")
-BUILD_DIR = os.path.join(CZECHLIGHT_DIR, "build")
-INSTALL_DIR = os.path.join(CZECHLIGHT_DIR, "install")
-
-# Create the required directories
-required_dirs = [SRC_DIR, BUILD_DIR, INSTALL_DIR, LOG_DIR]
-for directory in required_dirs:
-    if not os.path.exists(directory):
-        os.makedirs(directory)
-
-with open("config/logging.yaml", 'r') as f:
-    config = yaml.safe_load(f.read())
-    config["handlers"]["fileHandler"]["filename"] = os.path.join(LOG_DIR, "main.log")
-
-logging.config.dictConfig(config)
-logger = logging.getLogger(__name__)
+CLANG_VERSION = 17
 
 
-def download(repository_url: str, repository_name: str, branch: str, ) -> None:
-    """Downloads a repository and switches to the specified branch.
+def main():
+    # ------------------------------------------------
+    # ================ BASIC CONFIG ==================
+    # ------------------------------------------------
 
-    Args:
-        repository_url (str): The URL of the Git repository.
-        repository_name (str): The name of the repository.
-        branch (str): The branch to switch to.
+    root_dir = os.path.dirname(os.path.realpath(__file__))
+    logging_config = os.path.join(root_dir, "config", "logging.yaml")
+    dependency_config = os.path.join(root_dir, "config", "dependencies.yaml")
+    netconf_cli_config = os.path.join(root_dir, "config", "netconf-cli.yaml")
 
-    Returns:
-        None
-    """
+    # Load the dependency configuration
+    with open(dependency_config, 'r') as f:
+        dependencies = yaml.safe_load(f.read())
+    dependency_names = list(dependencies.keys())
 
-    logger.info(f"Downloading {repository_name}: "
-                f"\n\turl: {repository_url}"
-                f"\n\tbranch: {branch}")
+    # Load the netconf-cli configuration
+    with open(netconf_cli_config, 'r') as f:
+        netconf_cli = yaml.safe_load(f.read())
 
-    src_dir = os.path.join(SRC_DIR, repository_name)
-    if os.path.exists(src_dir):
-        shutil.rmtree(src_dir)
-        logger.info(f"Removed old {repository_name} directory")
+    # ------------------------------------------------
+    # ================ ARGUMENT PARSING ==============
+    # ------------------------------------------------
 
-    os.makedirs(src_dir)
-    logger.info(f"Created {repository_name} directory")
+    arg_parser = argparse.ArgumentParser(description="Utility for downloading and building dependencies")
+    arg_parser.add_argument("-a", "--action", type=str, choices=["install", "clean"],
+                            help="Action to perform")
+    arg_parser.add_argument("-t", "--target", type=str,
+                            choices=["all", "dependencies", "netconf-cli"] + dependency_names,
+                            help="The target to perform the action on")
+    arg_parser.add_argument("-c", "--compiler", type=str, choices=["gcc", "clang"], default="gcc",
+                            help="The compiler to use")
+    arg_parser.add_argument("-s", "--sanitizer", type=str, choices=["none", "address", "thread", "undefined"],
+                            default="none", help="The sanitizer to use")
+    arg_parser.add_argument("-j", "--jobs", type=int, default=1, help="The number of jobs to use")
+    args = arg_parser.parse_args()
 
-    log_file = os.path.join(LOG_DIR, f"{repository_name}.log")
-    try:
-        with open(log_file, 'w') as f:
-            logger.info(f"Downloading {repository_name}...")
-            subprocess.run(["git", "clone", repository_url, "."],
-                           cwd=src_dir, check=True, stdout=f, stderr=f)
+    # ------------------------------------------------
+    # ================ DIRECTORY SETUP ===============
+    # ------------------------------------------------
 
-            logger.info(f"Checking out {branch}...")
-            subprocess.run(["git", "checkout", branch],
-                           cwd=src_dir, check=True, stdout=f, stderr=f)
+    compiler = args.compiler
+    sanitizer = "clean" if args.sanitizer == "none" else args.sanitizer
+    build_options = f"{compiler}-{sanitizer}"
 
-    except subprocess.CalledProcessError as e:
-        logger.error(f"Error occurred: {e}")
-        logger.error(f"See {log_file} for more details")
-        exit(1)
+    log_dir = os.path.join(CZECHLIGHT_DIR, "logs")
+    dependency_dir = os.path.join(CZECHLIGHT_DIR, "dependencies")
+    build_dir = os.path.join(CZECHLIGHT_DIR, "build", build_options)
+    install_dir = os.path.join(CZECHLIGHT_DIR, "install", build_options)
 
-    logger.info(f"Finished downloading {repository_name}")
+    # Create the required directories
+    required_dirs = [log_dir, dependency_dir, build_dir, install_dir]
+    for directory in required_dirs:
+        if not os.path.exists(directory):
+            os.makedirs(directory)
 
+    # ------------------------------------------------
+    # ================ LOGGING CONFIG ================
+    # ------------------------------------------------
 
-def clean(repository_name: str) -> None:
-    """Cleans up a previously downloaded and installed repository.
+    with open(logging_config, 'r') as f:
+        config = yaml.safe_load(f.read())
+        config["handlers"]["fileHandler"]["filename"] = os.path.join(log_dir, "main.log")
 
-    Args:
-        repository_name (str): The name of repository to clean up.
+    logging.config.dictConfig(config)
+    logger = logging.getLogger(__name__)
 
-    Returns:
-        None
-    """
+    # ------------------------------------------------
+    # ================ ENVIRONMENT ===================
+    # ------------------------------------------------
 
-    install_dir = INSTALL_DIR
-    src_dir = os.path.join(SRC_DIR, repository_name)
-    build_dir = os.path.join(BUILD_DIR, repository_name)
-    log_file = os.path.join(LOG_DIR, f"{repository_name}.log")
+    env = load_env(args.compiler, args.sanitizer, install_dir)
 
-    # Remove the build directory
-    if os.path.exists(build_dir):
-        shutil.rmtree(build_dir)
-        logger.info(f"Removed {build_dir}")
+    # ------------------------------------------------
+    # ================ MAIN LOGIC ====================
+    # ------------------------------------------------
 
-    # Remove all files that were created by the installation
-    if os.path.exists(install_dir):
-        logger.info(f"Removing {repository_name} from {install_dir}")
-        for root, dirs, files in os.walk(install_dir):
-            for file in files + dirs:
-                if repository_name in file:
-                    path = os.path.join(root, file)
-                    logger.info(f"Removing {path}")
-                    if os.path.isfile(path):
-                        os.remove(path)
-                    elif os.path.isdir(path):
-                        shutil.rmtree(path)
+    # # Perform the specified action
+    # if args.action == "download":
+    #     if args.target == "all":
+    #         for name, data in dependencies.items():
+    #             download_dependency(data["url"], name, data["branch"], dependency_dir, log_dir)
+    #     elif args.target == "dependencies":
+    #         for name, data in dependencies.items():
+    #             download_dependency(data["url"], name, data["branch"], src_dir, log_dir)
+    #     elif args.target in dependency_names:
+    #         download_dependency(dependencies[args.target]["url"],
+    #                             args.target,
+    #                             dependencies[args.target]["branch"],
+    #                             src_dir, log_dir)
+    #     else:
+    #         arg_parser.error("Download action can be performed only on dependencies.")
 
-    # Remove the source directory
-    if os.path.exists(src_dir):
-        shutil.rmtree(src_dir)
-        logger.info(f"Removed {src_dir}")
+    if args.action == "clean":
+        if args.target == "all":
+            for name, data in dependencies.items():
+                clean(name, dependency_dir, build_dir, log_dir)
+            clean("netconf-cli", CZECHLIGHT_DIR, build_dir, log_dir)
 
-    # Remove the log file
-    if os.path.exists(log_file):
-        os.remove(log_file)
-        logger.info(f"Removed {log_file}")
+            # Remove the contents of the installation directory
+            if os.path.exists(install_dir):
+                logger.info(f"Removing from {install_dir}...")
+                shutil.rmtree(install_dir)
+                os.makedirs(install_dir)
+        elif args.target == "dependencies":
+            for name, data in dependencies.items():
+                clean(name, dependency_dir, build_dir, log_dir)
+        elif args.target in dependency_names:
+            clean(args.target, dependency_dir, build_dir, log_dir)
+        elif args.target == "netconf-cli":
+            clean("netconf-cli", CZECHLIGHT_DIR, build_dir, log_dir)
+        else:
+            arg_parser.error("Invalid clean target.")
 
-    logger.info(f"Finished cleaning {repository_name}")
-
-
-def build_and_install(repository_name: str, additional_args: list = None) -> None:
-    """Builds and installs a repository using CMake and Ninja.
-
-    Args:
-        repository_name (str): The name of the repository to build.
-        additional_args (list, optional): Additional arguments to pass to CMake.
-
-    Returns:
-        None
-    """
-
-    install_dir = INSTALL_DIR
-    src_dir = os.path.join(SRC_DIR, repository_name)
-    build_dir = os.path.join(BUILD_DIR, repository_name)
-    log_file = os.path.join(LOG_DIR, f"{repository_name}.log")
-
-    if additional_args is None:
-        additional_args = list()
-
-    # Set the build variables
-    env = os.environ.copy()
-    env["CC"] = "gcc"
-    env["CXX"] = "g++"
-    env["CMAKE_BUILD_TYPE"] = "Debug"
-    env["CMAKE_EXPORT_COMPILE_COMMANDS"] = "YES"
-
-    # Set the installation variables
-    env["PATH"] = f"{install_dir}/bin:{install_dir}/share:{env['PATH']}"
-    if 'LD_LIBRARY_PATH' not in env:
-        env["LD_LIBRARY_PATH"] = f"{install_dir}/lib:{install_dir}/share"
-    else:
-        env["LD_LIBRARY_PATH"] = f"{install_dir}/lib:{install_dir}/share:{env['LD_LIBRARY_PATH']}"
-
-    if 'PKG_CONFIG_PATH' not in env:
-        env["PKG_CONFIG_PATH"] = f"{install_dir}/lib/pkgconfig"
-    else:
-        env["PKG_CONFIG_PATH"] = f"{install_dir}/lib/pkgconfig:{env['PKG_CONFIG_PATH']}"
-
-    # Create the build directory
-    if os.path.exists(build_dir):
-        shutil.rmtree(build_dir)
-        logger.info(f"Removed old {build_dir}")
-    os.makedirs(build_dir)
-    logger.info(f"Created {build_dir}")
-
-    try:
-        with open(log_file, 'w') as f:
-            logger.info(f"Building {repository_name}...")
-            subprocess.run(
-                ["cmake", src_dir, "-GNinja",
-                 f"-DCMAKE_INSTALL_PREFIX:PATH={install_dir}",
-                 f"-DCMAKE_PREFIX_PATH:PATH={install_dir}",
-                 "-DHAVE_PTHREAD_MUTEX_TIMEDLOCK=OFF",
-                 "-DHAVE_PTHREAD_MUTEX_CLOCKLOCK=OFF",
-                 "-DHAVE_PTHREAD_RWLOCK_CLOCKRDLOCK=OFF",
-                 "-DHAVE_PTHREAD_RWLOCK_CLOCKWRLOCK=OFF",
-                 "-DHAVE_PTHREAD_COND_CLOCKWAIT=OFF"]
-                + additional_args,
-                cwd=build_dir, env=env, check=True, stdout=f, stderr=f)
-            logger.info(f"Installing {repository_name}...")
-            subprocess.run(["ninja", "install"],
-                           cwd=build_dir, env=env, check=True, stdout=f, stderr=f)
-    except subprocess.CalledProcessError as e:
-        logger.error(f"Error occurred: {e}")
-        logger.error(f"See {log_file} for more details")
-        exit(1)
-
-    logger.info(f"Finished installation of {repository_name}")
+    elif args.action == "install":
+        if args.target == "all":
+            for name, data in dependencies.items():
+                install(name, dependency_dir, build_dir, install_dir, log_dir, env, data["build_args"], args.jobs)
+            install("netconf-cli", CZECHLIGHT_DIR, build_dir, install_dir, log_dir, env, netconf_cli["build_args"],
+                    args.jobs)
+        elif args.target == "dependencies":
+            for name, data in dependencies.items():
+                install(name, dependency_dir, build_dir, install_dir, log_dir, env, data["build_args"], args.jobs)
+        elif args.target in dependency_names:
+            install(args.target, dependency_dir, build_dir, install_dir, log_dir, env,
+                    dependencies[args.target]["build_args"],
+                    args.jobs)
+        elif args.target == "netconf-cli":
+            install("netconf-cli", CZECHLIGHT_DIR, build_dir, install_dir, log_dir, env, netconf_cli["build_args"],
+                    args.jobs)
+        else:
+            arg_parser.error("Invalid build target.")
 
 
 if __name__ == "__main__":
-    arg_parser = argparse.ArgumentParser(description="Utility for downloading and building dependencies")
-    arg_parser.add_argument("-a", "--action", type=str, choices=["download", "install", "clean"],
-                            help="Action to perform")
-    arg_parser.add_argument("--all", action="store_true", help="Perform the action on all dependencies")
-    arg_parser.add_argument("--repository", type=str, help="Perform the action on the specified repository")
-    args = arg_parser.parse_args()
-
-    # Load the dependencies
-    with open("config/repositories.yaml", 'r') as f:
-        dependencies = yaml.safe_load(f.read())
-
-    # Perform the specified action
-    if args.action == "download":
-        if args.all:
-            for name, data in dependencies.items():
-                download(data["url"], name, data["branch"])
-        elif args.repository:
-            download(dependencies[args.repository]["url"],
-                     args.repository,
-                     dependencies[args.repository]["branch"])
-        else:
-            arg_parser.error("Either --all or --repository must be specified")
-
-    if args.action == "install":
-        if args.all:
-            for name, data in dependencies.items():
-                build_and_install(name, data["build_args"])
-        elif args.repository:
-            build_and_install(args.repository, dependencies[args.repository]["build_args"])
-        else:
-            arg_parser.error("Either --all or --repository must be specified")
-
-    if args.action == "clean":
-        if args.all:
-            for name, data in dependencies.items():
-                clean(name)
-        elif args.repository:
-            clean(args.repository)
-        else:
-            arg_parser.error("Either --all or --repository must be specified")
+    main()

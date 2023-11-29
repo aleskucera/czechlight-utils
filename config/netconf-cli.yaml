@@ -1,0 +1,3 @@
+url: "https://github.com/CESNET/netconf-cli.git"
+branch: "master"
+build_args: [ ]
