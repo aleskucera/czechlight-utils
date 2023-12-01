@@ -1,73 +1,35 @@
+doctest:
+  build_args:
+    - "-DDOCTEST_WITH_TESTS=OFF"
 libyang:
-  url: "https://github.com/CESNET/libyang.git"
-  branch: "devel"
-  commit: "HEAD"
   build_args:
     - "-DENABLE_VALGRIND_TESTS=ON"
     - "-DENABLE_TESTS=ON"
 libyang-cpp:
-  url: "https://github.com/CESNET/libyang-cpp.git"
-  branch: "master"
-  commit: "HEAD"
   build_args: [ ]
 libnetconf2:
-  url: "https://github.com/CESNET/libnetconf2.git"
-  branch: "devel"
-  commit: "HEAD"
   build_args:
     - "-DENABLE_VALGRIND_TESTS=ON"
 libnetconf2-cpp:
-  url: "https://github.com/CESNET/libnetconf2-cpp.git"
-  branch: "master"
-  commit: "HEAD"
   build_args: [ ]
 replxx:
-  url: "https://github.com/AmokHuginnsson/replxx.git"
-  branch: "master"
-  commit: "HEAD"
   build_args: [ ]
-#docopt.cpp:
-#  url: "https://github.com/docopt/docopt.cpp.git"
-#  branch: "master"
-#  commit: "HEAD"
-#  build_args: [ ]
-doctest:
-  url: "https://github.com/doctest/doctest.git"
-  branch: "master"
-  commit: "HEAD"
-  build_args:
-    - "-DDOCTEST_WITH_TESTS=OFF"
+docopt.cpp:
+  build_args: [ ]
 trompeloeil:
-  url: "https://github.com/rollbear/trompeloeil.git"
-  branch: "main"
-  commit: "HEAD"
   build_args:
     - "-DCMAKE_BUILD_TYPE=Release"
 sysrepo:
-  url: "https://github.com/sysrepo/sysrepo.git"
-  branch: "devel"
-  commit: "HEAD"
   build_args:
     - "-DENABLE_TESTS=ON"
     - "-DENABLE_VALGRIND_TESTS=ON"
 sysrepo-cpp:
-  url: "https://github.com/sysrepo/sysrepo-cpp.git"
-  branch: "master"
-  commit: "HEAD"
   build_args: [ ]
 Netopeer2:
-  url: "https://github.com/CESNET/netopeer2.git"
-  branch: "devel"
-  commit: "HEAD"
   build_args:
     - "-DENABLE_TESTS=ON"
     - "-DENABLE_VALGRIND_TESTS=ON"
     - "-DINSTALL_MODULES=ON"
     - "-DGENERATE_HOSTKEYS=ON"
     - "-DMERGE_LISTEN_CONFIG=ON"
-#netconf-cli:
-#  url: "https://github.com/CESNET/netconf-cli.git"
-#  branch: "master"
-#  commit: "HEAD"
-#  build_args: [ ]
 

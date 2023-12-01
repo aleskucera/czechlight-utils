@@ -1,9 +1,8 @@
 #!/bin/bash
 
-# Set the PATH and LD_LIBRARY_PATH environment variables based on the provided compiler and sanitizer
-# export PATH="/home/ales/cesnet/czechlight/install/bin:/home/ales/cesnet/czechlight/install/sbin:$PATH"
-# export LD_LIBRARY_PATH="/home/ales/cesnet/czechlight/install/lib:$LD_LIBRARY_PATH"
-# Set the build options based on the provided compiler and sanitizer
+CZECHLIGHT_DIR="/home/ales/cesnet/czechlight"
+PYTHON_VENV_FILE="/home/ales/cesnet/czechlight-utils/venv/bin/activate"
+source "$PYTHON_VENV_FILE"
 
 compiler="gcc"
 sanitizer="none"
@@ -23,18 +22,18 @@ while getopts "c:s:" opt; do
 	esac
 done
 
-BUILD_OPTIONS="${compiler}-$(if [ "$sanitizer" == "none" ]; then echo "clean"; else echo "$sanitizer"; fi)"
+build_options="${compiler}-$(if [ "$sanitizer" == "none" ]; then echo "clean"; else echo "$sanitizer"; fi)"
 
 # Set the PATH and LD_LIBRARY_PATH environment variables based on the provided compiler and sanitizer
-export PATH="/home/ales/cesnet/czechlight/install/$BUILD_OPTIONS/bin:/home/ales/cesnet/czechlight/install/$BUILD_OPTIONS/sbin:$PATH"
-export LD_LIBRARY_PATH="/home/ales/cesnet/czechlight/install/$BUILD_OPTIONS/lib:$LD_LIBRARY_PATH"
+export PATH="$CZECHLIGHT_DIR/install/$build_options/bin:$CZECHLIGHT_DIR/install/$build_options/sbin:$PATH"
+export LD_LIBRARY_PATH="$CZECHLIGHT_DIR/install/$build_options/lib:$LD_LIBRARY_PATH"
 
 # Change the prompt to indicate the environment variables are set
 PS1="[czechlight-${compiler}] \[\e[1;32m\]\u@\h \[\e[1;34m\]\w \[\e[0m\]$ "
 
 run-netopeer2-server() {
-	sock_file="/home/ales/cesnet/czechlight/install/$BUILD_OPTIONS/run/netopeer2-server.sock"
-	pid_file="/home/ales/cesnet/czechlight/install/$BUILD_OPTIONS/run/netopeer2-server.pid"
+	sock_file="$CZECHLIGHT_DIR/install/$build_options/run/netopeer2-server.sock"
+	pid_file="$CZECHLIGHT_DIR/install/$build_options/run/netopeer2-server.pid"
 
 	# Ensure the directory structure exists for the sock file
 	sock_dir=$(dirname "$sock_file")
@@ -73,7 +72,7 @@ run-netopeer2-server() {
 }
 
 run-netconf-cli() {
-	sock_file="/home/ales/cesnet/czechlight/install/$BUILD_OPTIONS/run/netopeer2-server.sock"
+	sock_file="$CZECHLIGHT_DIR/install/$build_options/run/netopeer2-server.sock"
 	netconf-cli --socket "$sock_file"
 }
 

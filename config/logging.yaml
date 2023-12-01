@@ -13,13 +13,7 @@ handlers:
     level: DEBUG
     formatter: consoleFormatter
     stream: ext://sys.stdout
-  fileHandler:
-    class: logging.FileHandler
-    level: DEBUG
-    formatter: fileFormatter
-    filename: null
-    mode: w
 loggers:
   root:
     level: DEBUG
-    handlers: [ consoleHandler, fileHandler ]
+    handlers: [ consoleHandler ]

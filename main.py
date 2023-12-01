@@ -6,10 +6,11 @@ import shutil
 import argparse
 import logging.config
 
-from src.utils import install, clean, load_env, download_dependency
+from utils import install, clean, load_env
 
 CZECHLIGHT_DIR = "/home/ales/cesnet/czechlight/"
-CLANG_VERSION = 17
+
+
 
 
 def main():
@@ -31,6 +32,12 @@ def main():
     with open(netconf_cli_config, 'r') as f:
         netconf_cli = yaml.safe_load(f.read())
 
+    with open(logging_config, 'r') as f:
+        config = yaml.safe_load(f.read())
+
+    logging.config.dictConfig(config)
+    logger = logging.getLogger(__name__)
+
     # ------------------------------------------------
     # ================ ARGUMENT PARSING ==============
     # ------------------------------------------------
@@ -43,7 +50,7 @@ def main():
                             help="The target to perform the action on")
     arg_parser.add_argument("-c", "--compiler", type=str, choices=["gcc", "clang"], default="gcc",
                             help="The compiler to use")
-    arg_parser.add_argument("-s", "--sanitizer", type=str, choices=["none", "address", "thread", "undefined"],
+    arg_parser.add_argument("-s", "--sanitizer", type=str, choices=["none", "address", "thread"],
                             default="none", help="The sanitizer to use")
     arg_parser.add_argument("-j", "--jobs", type=int, default=1, help="The number of jobs to use")
     args = arg_parser.parse_args()
@@ -68,17 +75,6 @@ def main():
             os.makedirs(directory)
 
     # ------------------------------------------------
-    # ================ LOGGING CONFIG ================
-    # ------------------------------------------------
-
-    with open(logging_config, 'r') as f:
-        config = yaml.safe_load(f.read())
-        config["handlers"]["fileHandler"]["filename"] = os.path.join(log_dir, "main.log")
-
-    logging.config.dictConfig(config)
-    logger = logging.getLogger(__name__)
-
-    # ------------------------------------------------
     # ================ ENVIRONMENT ===================
     # ------------------------------------------------
 
@@ -88,27 +84,11 @@ def main():
     # ================ MAIN LOGIC ====================
     # ------------------------------------------------
 
-    # # Perform the specified action
-    # if args.action == "download":
-    #     if args.target == "all":
-    #         for name, data in dependencies.items():
-    #             download_dependency(data["url"], name, data["branch"], dependency_dir, log_dir)
-    #     elif args.target == "dependencies":
-    #         for name, data in dependencies.items():
-    #             download_dependency(data["url"], name, data["branch"], src_dir, log_dir)
-    #     elif args.target in dependency_names:
-    #         download_dependency(dependencies[args.target]["url"],
-    #                             args.target,
-    #                             dependencies[args.target]["branch"],
-    #                             src_dir, log_dir)
-    #     else:
-    #         arg_parser.error("Download action can be performed only on dependencies.")
-
     if args.action == "clean":
         if args.target == "all":
             for name, data in dependencies.items():
-                clean(name, dependency_dir, build_dir, log_dir)
-            clean("netconf-cli", CZECHLIGHT_DIR, build_dir, log_dir)
+                clean(name, dependency_dir, build_dir)
+            clean("netconf-cli", CZECHLIGHT_DIR, build_dir)
 
             # Remove the contents of the installation directory
             if os.path.exists(install_dir):
@@ -117,29 +97,29 @@ def main():
                 os.makedirs(install_dir)
         elif args.target == "dependencies":
             for name, data in dependencies.items():
-                clean(name, dependency_dir, build_dir, log_dir)
+                clean(name, dependency_dir, build_dir)
         elif args.target in dependency_names:
-            clean(args.target, dependency_dir, build_dir, log_dir)
+            clean(args.target, dependency_dir, build_dir)
         elif args.target == "netconf-cli":
-            clean("netconf-cli", CZECHLIGHT_DIR, build_dir, log_dir)
+            clean("netconf-cli", CZECHLIGHT_DIR, build_dir)
         else:
             arg_parser.error("Invalid clean target.")
 
     elif args.action == "install":
         if args.target == "all":
             for name, data in dependencies.items():
-                install(name, dependency_dir, build_dir, install_dir, log_dir, env, data["build_args"], args.jobs)
-            install("netconf-cli", CZECHLIGHT_DIR, build_dir, install_dir, log_dir, env, netconf_cli["build_args"],
+                install(name, dependency_dir, build_dir, install_dir, env, data["build_args"], args.jobs)
+            install("netconf-cli", CZECHLIGHT_DIR, build_dir, install_dir, env, netconf_cli["build_args"],
                     args.jobs)
         elif args.target == "dependencies":
             for name, data in dependencies.items():
-                install(name, dependency_dir, build_dir, install_dir, log_dir, env, data["build_args"], args.jobs)
+                install(name, dependency_dir, build_dir, install_dir, env, data["build_args"], args.jobs)
         elif args.target in dependency_names:
-            install(args.target, dependency_dir, build_dir, install_dir, log_dir, env,
+            install(args.target, dependency_dir, build_dir, install_dir, env,
                     dependencies[args.target]["build_args"],
                     args.jobs)
         elif args.target == "netconf-cli":
-            install("netconf-cli", CZECHLIGHT_DIR, build_dir, install_dir, log_dir, env, netconf_cli["build_args"],
+            install("netconf-cli", CZECHLIGHT_DIR, build_dir, install_dir, env, netconf_cli["build_args"],
                     args.jobs)
         else:
             arg_parser.error("Invalid build target.")
